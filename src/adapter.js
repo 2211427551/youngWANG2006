@@ -22,43 +22,81 @@ async function tryDeleteChat(page) {
   if (!config.autoDeleteAfterChat) return;
   const start = Date.now();
   try {
-    // 若弹出菜单已可见，直接点击其中的 Delete
-    let menuDelete = page.locator('div[data-radix-popover-content-wrapper]').getByText(config.deleteMenuText, { exact: true });
-    if (!(await menuDelete.count())) {
-      // 尝试点击可能的菜单触发器（通用启发式）
+    // Step 1：点击下拉菜单中的 Delete（限定在 Radix 的 popover 内容区内）
+    const popWrapper = page.locator('div[data-radix-popover-content-wrapper]');
+    let menuOpen = await popWrapper.isVisible().catch(() => false);
+
+    // 若菜单未开启，尝试触发常见的菜单打开按钮
+    if (!menuOpen) {
       const triggers = [
-        'button[aria-haspopup="menu"]',
         '[data-radix-dropdown-menu-trigger]',
+        'button[aria-haspopup="menu"]',
+        'button[aria-controls*="radix"]',
+        'button[aria-expanded]',
         'button:has(svg.lucide-ellipsis)',
         'button:has(svg[class*="ellipsis"])',
         'button:has(svg.lucide-more-vertical)',
-        // 顶部导航区域常见按钮
+        // 顶部导航/工具栏区域常见按钮
         'div[class*="z-50"] button',
       ];
       for (const sel of triggers) {
         const btn = page.locator(sel).last();
         if (await btn.count()) {
           try {
-            await btn.click({ timeout: 500 });
-            const pop = page.locator('div[data-radix-popover-content-wrapper]');
-            const visible = await pop.waitFor({ state: 'visible', timeout: 800 }).then(() => true).catch(() => false);
-            if (visible) break;
+            await btn.click({ timeout: 600 });
+            const visible = await popWrapper
+              .waitFor({ state: 'visible', timeout: 800 })
+              .then(() => true)
+              .catch(() => false);
+            if (visible) { menuOpen = true; break; }
           } catch (_) {}
         }
       }
-      menuDelete = page.locator('div[data-radix-popover-content-wrapper]').getByText(config.deleteMenuText, { exact: true });
     }
 
-    if (await menuDelete.count()) {
-      await menuDelete.first().click({ timeout: 1000 }).catch(() => {});
-      // 弹出确认对话框后，点击确认删除
-      const confirmBtn = page.getByRole('button', { name: config.confirmDeleteText, exact: true });
-      await confirmBtn.click({ timeout: 2000 }).catch(() => {});
-      // 等待对话框关闭（尽力而为）
-      await page.waitForTimeout(300);
+    // 在已开启的下拉菜单中定位并点击 Delete 项
+    let clickedMenuDelete = false;
+    if (menuOpen) {
+      let menuItem = popWrapper.getByRole('menuitem', { name: config.deleteMenuText, exact: true }).first();
+      if (!(await menuItem.count())) {
+        // 兜底：按文本匹配
+        menuItem = popWrapper.getByText(config.deleteMenuText, { exact: true }).first();
+      }
+      if (await menuItem.count()) {
+        await menuItem.click({ timeout: 1500 }).catch(() => {});
+        clickedMenuDelete = true;
+      }
+    } else {
+      // 兜底：在任意可见菜单中直接找 Delete 项
+      const anyMenuItem = page.getByRole('menuitem', { name: config.deleteMenuText, exact: true }).first();
+      if (await anyMenuItem.count()) {
+        await anyMenuItem.click({ timeout: 1500 }).catch(() => {});
+        clickedMenuDelete = true;
+      }
+    }
+
+    // Step 2：在 Headless UI 的确认对话框中再次点击 Delete 确认
+    if (clickedMenuDelete) {
+      // 等待确认对话框出现
+      const dialog = page.locator('[role="dialog"][data-headlessui-state="open"], div[data-headlessui-portal-root] [role="dialog"]');
+      await dialog.waitFor({ state: 'visible', timeout: config.deleteTimeoutMs }).catch(() => {});
+
+      // 在对话框范围内优先查找“Delete”按钮
+      let confirmBtn = dialog.getByRole('button', { name: config.confirmDeleteText, exact: true }).first();
+      if (!(await confirmBtn.count())) {
+        // 兜底：全局查找一个可见的 Delete 按钮
+        confirmBtn = page.getByRole('button', { name: config.confirmDeleteText, exact: true }).first();
+      }
+      if (await confirmBtn.count()) {
+        await confirmBtn.click({ timeout: 2500 }).catch(() => {});
+      }
+
+      // 尝试等待对话框关闭，确保删除流程完成
+      await dialog.waitFor({ state: 'detached', timeout: 2500 }).catch(() => {});
+      await page.waitForTimeout(200);
     }
   } catch (e) {
-    logger.debug({ err: e, elapsedMs: Date.now() - start }, 'Auto delete chat failed');
+    logger.debug({ err: e, elapsedMs: Date.now() - start }, 'Auto delete chat failed (two-step)');
   }
 }
 
