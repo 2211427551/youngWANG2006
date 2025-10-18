@@ -142,13 +142,63 @@ node examples/node_chat.js "给我写一首七言绝句"
 
 ## Docker 部署
 
-使用 docker-compose（包含持久化 user-data 卷）：
+1) 准备环境变量（可选）
 
 ```
-docker-compose up --build
+cp .env.example .env
+# 根据需要修改 .env（docker compose 会自动读取；也可直接在 docker-compose.yml 的 environment 覆盖）
 ```
 
-容器中默认无头运行。若需要在服务器上进行可视化登录，可考虑 `xvfb-run` 包装运行，或在本地完成登录后将 `user-data/` 内容同步到服务器卷。
+2) 启动服务（包含持久化 user-data 卷）
+
+```
+docker compose up -d --build
+# 查看日志
+docker compose logs -f
+```
+
+说明：
+- 服务默认监听 0.0.0.0:3000，浏览器会话持久化在名为 user-data 的卷中
+- 容器内默认以无头模式运行；如需在容器内模拟显示，可使用 `xvfb-run`（见 docker-compose.yml 注释）
+- 为提升在 Docker Desktop/WSL 环境下的稳定性，compose 已设置 `shm_size: 1g`（增加 /dev/shm 大小）
+
+### 在 WSL 上通过 Docker 部署
+
+前置条件：
+- Windows 10/11 + WSL2（建议 Ubuntu）
+- 安装 Docker Desktop，并在 Settings -> Resources -> WSL Integration 勾选对应发行版
+
+步骤：
+1) 在 WSL 的 Linux 文件系统中操作（例如 /home/你的用户名/...），避免放在 /mnt/c 路径以免 I/O 缓慢
+2) 克隆仓库并进入目录，按需准备 `.env`
+3) 启动服务：
+   ```
+   docker compose up -d --build
+   ```
+4) 从 Windows 浏览器访问 http://localhost:3000
+
+可视化登录（可选）
+- 方式 A：在 WSL 宿主机中完成登录后复用会话
+  - 在 WSL 中安装依赖并打开可视化浏览器窗口（WSLg）：
+    ```
+    npm install
+    npx playwright install chromium
+    HEADFUL=1 npm run login
+    ```
+  - 登录成功后，cookie 会落在仓库目录下的 `user-data/`
+  - 使用覆盖文件让容器挂载宿主目录（覆盖默认的 named volume）：
+    ```
+    docker compose -f docker-compose.yml -f docker-compose.wsl.yml up -d --build
+    ```
+- 方式 B：仅使用容器
+  - 仍为无头模式，可调用 `GET /login/start` 在持久化上下文中打开登录页（不可见）
+  - 或结合 `xvfb-run` 在容器内模拟显示（不建议在生产环境使用）
+
+排障建议：
+- 若 Chromium 在容器中崩溃或页面空白：
+  - 确保使用了官方 Playwright 基础镜像（本仓库 Dockerfile 已使用）
+  - 保持 `shm_size: 1g` 以增加共享内存
+  - 已在代码中启用了 `--no-sandbox` 与 `--disable-dev-shm-usage`
 
 ## 合规与限制
 

@@ -1,0 +1,8 @@
+version: '3.8'
+services:
+  proxy:
+    # 在 WSL 中为了便于可视化登录（在容器外执行），将宿主目录挂载到容器。
+    # 使用方式：
+    #   docker compose -f docker-compose.yml -f docker-compose.wsl.yml up -d --build
+    volumes:
+      - ./user-data:/app/user-data

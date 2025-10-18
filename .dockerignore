@@ -1,0 +1,15 @@
+node_modules/
+user-data/
+logs/
+.env
+.env.*
+.git/
+.gitignore
+Dockerfile*
+docker-compose*.yml
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-store/
+*.swp
+.DS_Store
