@@ -4,6 +4,9 @@ services:
     build: .
     ports:
       - "3000:3000"
+    # 可选：从 .env 加载环境变量（会覆盖下方默认值）
+    env_file:
+      - .env
     environment:
       # 必填：设置为目标站点的对话页面 URL
       TARGET_URL: "https://example.com/chat"
@@ -17,6 +20,13 @@ services:
       LOG_LEVEL: "info"
     volumes:
       - user-data:/app/user-data
+    # 提升浏览器稳定性（WSL/Docker Desktop 推荐）：扩大 /dev/shm
+    shm_size: "1g"
+    # 生产部署推荐：容器失败自动重启
+    restart: unless-stopped
+    # 容器访问宿主机（如需回环访问 Windows/WSL 主机）
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
     # 如需在容器内可视化（虚拟显示）登录，可尝试：
     # entrypoint: ["bash", "-lc", "xvfb-run -s '-screen 0 1280x1024x24' npm start"]
 volumes:
