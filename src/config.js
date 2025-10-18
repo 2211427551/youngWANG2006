@@ -27,10 +27,18 @@ const config = {
     // 发送按钮（可选）：若未配置则默认回车发送
     sendButton: process.env.SEND_BUTTON_SELECTOR || '',
     // 回复容器：用于检索最新的 AI 回复节点
-    responseContainer: process.env.RESPONSE_CONTAINER_SELECTOR || '.response, .assistant, .message-bot, .ai-message, .bot-message, .response-container',
+    // 根据提供的 HTML，回复正文位于 <div class="wrap-anywhere"><p>...</p></div>
+    // 因此将该选择器置于优先位置，并保留通用后备选择器。
+    responseContainer: process.env.RESPONSE_CONTAINER_SELECTOR || 'div.wrap-anywhere p, div.wrap-anywhere, .response, .assistant, .message-bot, .ai-message, .bot-message, .response-container',
     // 新建对话按钮（可选）：用于清空上下文
     newChatButton: process.env.NEW_CHAT_BUTTON_SELECTOR || ''
   },
+
+  // 对话清理（完成后自动删除，避免累计占用）
+  autoDeleteAfterChat: bool(process.env.AUTO_DELETE_AFTER_CHAT, true),
+  deleteTimeoutMs: parseInt(process.env.DELETE_TIMEOUT_MS || '10000', 10),
+  deleteMenuText: process.env.DELETE_MENU_TEXT || 'Delete',
+  confirmDeleteText: process.env.CONFIRM_DELETE_TEXT || 'Delete',
 
   // Playwright/浏览器配置
   userDataDir: process.env.USER_DATA_DIR || path.resolve(process.cwd(), 'user-data'),
