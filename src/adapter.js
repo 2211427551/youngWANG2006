@@ -17,6 +17,51 @@ function getSelectors() {
   };
 }
 
+// 尝试在对话完成后自动删除当前会话（最佳努力，失败不影响主流程）
+async function tryDeleteChat(page) {
+  if (!config.autoDeleteAfterChat) return;
+  const start = Date.now();
+  try {
+    // 若弹出菜单已可见，直接点击其中的 Delete
+    let menuDelete = page.locator('div[data-radix-popover-content-wrapper]').getByText(config.deleteMenuText, { exact: true });
+    if (!(await menuDelete.count())) {
+      // 尝试点击可能的菜单触发器（通用启发式）
+      const triggers = [
+        'button[aria-haspopup="menu"]',
+        '[data-radix-dropdown-menu-trigger]',
+        'button:has(svg.lucide-ellipsis)',
+        'button:has(svg[class*="ellipsis"])',
+        'button:has(svg.lucide-more-vertical)',
+        // 顶部导航区域常见按钮
+        'div[class*="z-50"] button',
+      ];
+      for (const sel of triggers) {
+        const btn = page.locator(sel).last();
+        if (await btn.count()) {
+          try {
+            await btn.click({ timeout: 500 });
+            const pop = page.locator('div[data-radix-popover-content-wrapper]');
+            const visible = await pop.waitFor({ state: 'visible', timeout: 800 }).then(() => true).catch(() => false);
+            if (visible) break;
+          } catch (_) {}
+        }
+      }
+      menuDelete = page.locator('div[data-radix-popover-content-wrapper]').getByText(config.deleteMenuText, { exact: true });
+    }
+
+    if (await menuDelete.count()) {
+      await menuDelete.first().click({ timeout: 1000 }).catch(() => {});
+      // 弹出确认对话框后，点击确认删除
+      const confirmBtn = page.getByRole('button', { name: config.confirmDeleteText, exact: true });
+      await confirmBtn.click({ timeout: 2000 }).catch(() => {});
+      // 等待对话框关闭（尽力而为）
+      await page.waitForTimeout(300);
+    }
+  } catch (e) {
+    logger.debug({ err: e, elapsedMs: Date.now() - start }, 'Auto delete chat failed');
+  }
+}
+
 // 发送消息并以增量形式回调 onDelta（SSE 使用该函数）
 async function sendMessageAndStream(page, prompt, onDelta, options = {}) {
   const selectors = getSelectors();
@@ -118,6 +163,9 @@ async function sendMessageAndStream(page, prompt, onDelta, options = {}) {
     await page.waitForTimeout(pollIntervalMs);
   }
 
+  // 最佳努力自动删除当前对话
+  await tryDeleteChat(page).catch(() => {});
+
   return total.trim();
 }
 
@@ -127,6 +175,8 @@ async function sendMessageAndGetFull(page, prompt) {
   await sendMessageAndStream(page, prompt, async (delta) => {
     full += delta;
   });
+  // 最佳努力自动删除当前对话
+  await tryDeleteChat(page).catch(() => {});
   return full.trim();
 }
 
@@ -134,4 +184,5 @@ module.exports = {
   getSelectors,
   sendMessageAndStream,
   sendMessageAndGetFull,
+  tryDeleteChat,
 };
