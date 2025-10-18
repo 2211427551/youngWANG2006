@@ -15,7 +15,7 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const pinoHttp = require('pino-http');
-const pRetry = require('p-retry');
+const pRetry = require('p-retry').default;
 const { config } = require('./config');
 const { logger } = require('./logger');
 const { metrics } = require('./metrics');
