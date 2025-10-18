@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# 示例：调用 /chat 获取完整回复
+# 用法：./examples/curl_chat.sh "你的问题"
 set -euo pipefail
 
 API_KEY="${API_KEY:-dev-key}"

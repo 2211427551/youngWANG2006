@@ -1,3 +1,17 @@
+/*
+ * HTTP 服务（Express）：
+ * - 接口：
+ *   - POST /chat：提交 prompt，返回完整回复
+ *   - POST /chat/stream：提交 prompt，SSE 增量输出
+ *   - GET /health：健康检查与摘要指标
+ *   - GET /metrics：Prometheus 风格文本指标
+ *   - GET /login/start：打开登录页面以进行首次手动登录
+ * - 中间件：
+ *   - pino-http：结构化日志
+ *   - express-rate-limit：按 IP/Key 限流
+ *   - API Key 鉴权（可选）
+ *   - 队列回压：当排队过多返回 429
+ */
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const pinoHttp = require('pino-http');
@@ -18,7 +32,7 @@ const app = express();
 app.use(express.json({ limit: '1mb' }));
 app.use(pinoHttp({ logger }));
 
-// Rate limit per IP/key
+// 按 IP/Key 维度限流
 const limiter = rateLimit({
   windowMs: config.rateLimitWindowMs,
   max: config.rateLimitMax,
@@ -28,7 +42,7 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// API key auth
+// API Key 鉴权（留空则跳过）
 app.use((req, res, next) => {
   if (!config.apiKeys.length) return next();
   const key = req.headers['x-api-key'];
@@ -38,7 +52,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Queue backpressure
+// 队列回压：排队超过上限则拒绝
 app.use((req, res, next) => {
   const queued = queue.size + queue.pending;
   if (queued >= config.maxQueue) {
@@ -47,6 +61,7 @@ app.use((req, res, next) => {
   next();
 });
 
+// SSE 辅助（头与发送）
 function sseHeaders(res) {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -59,6 +74,7 @@ function sseSend(res, event, data) {
   res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
+// 健康检查
 app.get('/health', async (req, res) => {
   res.json({
     status: 'ok',
@@ -77,6 +93,7 @@ app.get('/health', async (req, res) => {
   });
 });
 
+// 指标（文本）
 app.get('/metrics', (req, res) => {
   res.type('text/plain').send(
     `proxy_requests_total ${metrics.requestsTotal}\n` +
@@ -87,7 +104,7 @@ app.get('/metrics', (req, res) => {
   );
 });
 
-// Login helpers
+// 登录辅助接口
 app.get('/login/start', async (req, res) => {
   try {
     const page = await browserManager.openLoginPage();
@@ -112,7 +129,7 @@ app.get('/login/screenshot', async (req, res) => {
   }
 });
 
-// Chat - full response
+// /chat：返回完整回复
 app.post('/chat', async (req, res) => {
   const started = Date.now();
   const { prompt } = req.body || {};
@@ -122,6 +139,7 @@ app.post('/chat', async (req, res) => {
     return res.status(400).json({ error: 'Invalid prompt' });
   }
 
+  // 幂等：若命中缓存则直接返回
   const cached = idempotencyCache.get(idempotencyKey);
   if (cached) {
     return res.json({ cached: true, reply: cached });
@@ -138,12 +156,14 @@ app.post('/chat', async (req, res) => {
       }
     };
 
+    // 失败重试（指数退避参数可配）
     const task = () => pRetry(job, {
       retries: config.retryAttempts,
       minTimeout: config.retryMinTimeoutMs,
       factor: config.retryFactor,
     });
 
+    // 通过队列调度，受并发与超时限制
     const result = await queue.add(task, { throwOnTimeout: true });
     idempotencyCache.set(idempotencyKey, result);
 
@@ -158,7 +178,7 @@ app.post('/chat', async (req, res) => {
   }
 });
 
-// Chat - streaming SSE
+// /chat/stream：以 SSE 增量输出
 app.post('/chat/stream', async (req, res) => {
   const started = Date.now();
   const { prompt } = req.body || {};
@@ -167,6 +187,7 @@ app.post('/chat/stream', async (req, res) => {
     return res.status(400).json({ error: 'Invalid prompt' });
   }
 
+  // 幂等：若命中缓存则直接全量输出并结束
   const cached = idempotencyCache.get(idempotencyKey);
   if (cached) {
     sseHeaders(res);
@@ -218,6 +239,7 @@ app.post('/chat/stream', async (req, res) => {
   });
 });
 
+// 启动监听并预热浏览器
 const server = app.listen(config.port, config.host, async () => {
   logger.info({ port: config.port, host: config.host }, 'Starting server');
   try {
@@ -228,6 +250,7 @@ const server = app.listen(config.port, config.host, async () => {
   }
 });
 
+// 优雅退出
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down...');
   server.close(() => process.exit(0));

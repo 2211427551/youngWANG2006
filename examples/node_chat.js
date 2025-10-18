@@ -1,3 +1,5 @@
+// 示例：Node 调用 /chat 获取完整回复
+// 用法：node examples/node_chat.js "你的问题"
 const API_KEY = process.env.API_KEY || 'dev-key';
 const PROMPT = process.argv.slice(2).join(' ') || '给我写一首七言绝句';
 
