@@ -1,0 +1,23 @@
+version: '3.8'
+services:
+  proxy:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      # Required: set to the chat site's conversation page
+      TARGET_URL: "https://example.com/chat"
+      # Provide a comma-separated list of API keys to allow
+      API_KEY: "dev-key"
+      # Run headful to perform manual login locally
+      HEADFUL: "0"
+      CONCURRENCY: "2"
+      TIMEOUT_MS: "120000"
+      RETRY_ATTEMPTS: "1"
+      LOG_LEVEL: "info"
+    volumes:
+      - user-data:/app/user-data
+    # Uncomment for headful mode inside container with xvfb
+    # entrypoint: ["bash", "-lc", "xvfb-run -s '-screen 0 1280x1024x24' npm start"]
+volumes:
+  user-data:
