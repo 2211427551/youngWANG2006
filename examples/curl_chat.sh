@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# 示例：调用 /chat 获取完整回复
+# 用法：./examples/curl_chat.sh "你的问题"
+set -euo pipefail
+
+API_KEY="${API_KEY:-dev-key}"
+PROMPT=${1:-"你好，帮我写一首五言绝句。"}
+
+curl -sS \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: ${API_KEY}" \
+  -X POST http://localhost:3000/chat \
+  -d "{\"prompt\": \"${PROMPT}\"}" | jq .

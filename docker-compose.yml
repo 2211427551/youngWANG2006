@@ -1,0 +1,23 @@
+version: '3.8'
+services:
+  proxy:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      # 必填：设置为目标站点的对话页面 URL
+      TARGET_URL: "https://example.com/chat"
+      # API Key 白名单（逗号分隔）；留空则关闭鉴权
+      API_KEY: "dev-key"
+      # 容器内一般无显示环境，建议使用无头；如需可视化登录可结合 xvfb 使用
+      HEADFUL: "0"
+      CONCURRENCY: "2"
+      TIMEOUT_MS: "120000"
+      RETRY_ATTEMPTS: "1"
+      LOG_LEVEL: "info"
+    volumes:
+      - user-data:/app/user-data
+    # 如需在容器内可视化（虚拟显示）登录，可尝试：
+    # entrypoint: ["bash", "-lc", "xvfb-run -s '-screen 0 1280x1024x24' npm start"]
+volumes:
+  user-data:
